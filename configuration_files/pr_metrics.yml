@@ -1,0 +1,104 @@
+# Define inputs that specify the initial information for the workflow
+inputs:
+  service:
+    type: blueprint
+    result: service_blueprint_identifier  # Stores the ID after retrieval
+  Pull request:
+    type: blueprint
+    result: pull_request_blueprint_identifier  # Stores the ID after retrieval
+  Git Integration:
+    type: integration
+    result: integration_identifier  # Stores the ID after retrieval
+
+# Define steps in the workflow to execute actions sequentially
+steps:
+  - name: Load Service Blueprint
+    action: load_resource
+    resource_type: blueprint
+    resource_id: "{{ inputs.service.result }}"  # Uses the ID obtained from the input
+    result: service_data  # Caches service data for subsequent steps
+
+  - name: Load Pull Request Blueprint
+    action: load_resource
+    resource_type: blueprint
+    resource_id: "{{ inputs.Pull request.result }}"  # Uses the ID obtained from the input
+    result: pull_request_data  # Caches pull request blueprint data for subsequent steps
+
+  - name: Load Git Integration
+    action: load_resource
+    resource_type: integration
+    resource_id: "{{ inputs.Git Integration.result }}"  # Uses the ID obtained from the input
+    result: integration_data  # Caches integration data for subsequent steps
+
+  - name: Upsert Properties to Pull Request
+    action: add_properties_to_blueprint
+    blueprint_data: "{{ steps.Load Pull Request Blueprint.result }}"  # Uses cached data from Load Pull Request Blueprint step
+    properties:
+      - identifier: "changed_files"
+        name: "Changed files"
+        type: "number"
+      - identifier: "description"
+        name: "Description"
+        type: "string"
+
+  - name: Upsert Scorecards to Pull Request
+    action: add_scorecards_to_blueprint
+    blueprint_data: "{{ steps.Load Pull Request Blueprint.result }}"  # Uses cached data from Load Pull Request Blueprint step
+    scorecards:
+      - identifier: "pr_metrics"
+        name: "PR Metrics"
+        rules:
+          - identifier: "pr_descr_not_empty"
+            title: "PR Description Cannot be Empty"
+            level: "Bronze"
+            query: |
+              {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": "isNotEmpty",
+                    "property": "prDescription"
+                  }
+                ]
+              }
+          - identifier: "pr_file_limit_gold"
+            title: "PR Can't Have More than 5 Changed Files"
+            level: "Gold"
+            query: |
+              {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": "<=",
+                    "property": "changedFiles",
+                    "value": 5
+                  }
+                ]
+              }
+
+  - name: Upsert Git Integration Mapping
+    action: upsert_integration
+    integration_data: "{{ steps.Load Git Integration.result }}"  # Uses cached data from Load Git Integration step
+    data:
+      - kind: pull-request
+        mappings:
+          - properties:
+              - changedFiles: .changed_files
+              - prDescription: .description
+
+  - name: Upsert Properties to Service
+    action: add_properties_to_blueprint
+    blueprint_data: "{{ steps.Load Service Blueprint.result }}"  # Uses cached data from Load Service Blueprint step
+    aggregationProperties:
+      - identifier: "average_changed_files_per_pr"
+        title: "Average PR changed files"
+        type: "number"
+        target: "githubPullRequest"
+        calculationSpec: |
+          {
+            "func": "average",
+            "averageOf": "total",
+            "property": "timeToMergeInMinutes",
+            "calculationBy": "property",
+            "measureTimeBy": "$createdAt"
+          }
