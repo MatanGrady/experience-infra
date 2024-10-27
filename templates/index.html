@@ -1,0 +1,29 @@
+<!-- templates/index.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YAML Workflow Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Experience Marketplace</h1>
+    <div class="container">
+        {% for yaml in yaml_data %}
+        <div class="cube" onclick="invokeScript('{{ yaml.filename }}')">
+            <h2>{{ yaml.title }}</h2>
+            <p>{{ yaml.description }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        function invokeScript(filename) {
+            alert("This will invoke the main script for: " + filename);
+            // Here you can add an AJAX call or redirect to trigger the main script with the filename as input
+        }
+    </script>
+</body>
+</html>

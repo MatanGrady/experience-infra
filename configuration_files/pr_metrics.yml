@@ -1,3 +1,6 @@
+title: "Add PR Metrics"
+description: "Enrich your pull requests with advanced metrics"
+
 # Define inputs that specify the initial information for the workflow
 inputs:
   service:
