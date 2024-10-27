@@ -9,21 +9,76 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Experience Marketplace</h1>
+    <h1>YAML Workflow Tool</h1>
     <div class="container">
         {% for yaml in yaml_data %}
-        <div class="cube" onclick="invokeScript('{{ yaml.filename }}')">
+        <!-- Store YAML data as a JSON string in a data-yaml attribute, using single quotes around the attribute -->
+        <div class="cube" data-yaml='{{ yaml|tojson }}' onclick="invokeScript(this)">
             <h2>{{ yaml.title }}</h2>
             <p>{{ yaml.description }}</p>
         </div>
         {% endfor %}
     </div>
 
-    <script>
-        function invokeScript(filename) {
-            alert("This will invoke the main script for: " + filename);
-            // Here you can add an AJAX call or redirect to trigger the main script with the filename as input
-        }
-    </script>
+    <!-- Popup for Input Fields -->
+<div id="popup" class="popup">
+    <div class="popup-content">
+        <h2>Provide Inputs</h2>
+        <div id="input-fields"></div>
+        <button onclick="submitInputs()">Continue</button>
+        <button onclick="closePopup()">Cancel</button>
+    </div>
+</div>
+
+<script>
+function invokeScript(element) {
+    // Retrieve the JSON data from the data-yaml attribute
+    const yamlData = JSON.parse(element.getAttribute("data-yaml"));
+
+    if (yamlData.inputs && yamlData.inputs.length > 0) {
+        renderInputs(yamlData.inputs);
+        document.getElementById("popup").style.display = "flex";
+
+        // Store the filename globally or pass it to submitInputs directly later
+        window.currentFilename = yamlData.filename;  // Store filename for later use in submitInputs
+    } else {
+        submitInputs(yamlData.filename, {});  // No inputs needed, proceed directly
+    }
+}
+
+    function renderInputs(inputs) {
+        const inputFields = document.getElementById("input-fields");
+        inputFields.innerHTML = "";  // Clear previous inputs
+        inputs.forEach(input => {
+            inputFields.innerHTML += `<label>${input.name}: <input type="${input.type}" id="${input.name}" /></label><br>`;
+        });
+    }
+
+ function submitInputs(filename = window.currentFilename, inputs = {}) {
+    if (!Object.keys(inputs).length) {
+        // Collect input values
+        const fields = document.querySelectorAll("#input-fields input");
+        fields.forEach(field => {
+            inputs[field.id] = field.value;
+        });
+    }
+
+    fetch('/execute_steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, inputs })  // Include filename in the payload
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("popup").style.display = "none";
+        alert("Execution Plan: " + JSON.stringify(data.execution_plan, null, 2));
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+    function closePopup() {
+        document.getElementById("popup").style.display = "none";
+    }
+</script>
 </body>
 </html>
