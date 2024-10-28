@@ -18,19 +18,19 @@ steps:
   - name: Load Service Blueprint
     action: load_resource
     resource_type: blueprint
-    resource_id: "{{ inputs.service.result }}"  # Uses the ID obtained from the input
+    resource_id: "{{ inputs.service }}"  # Uses the ID obtained from the input
     result: service_data  # Caches service data for subsequent steps
 
   - name: Load Pull Request Blueprint
     action: load_resource
     resource_type: blueprint
-    resource_id: "{{ inputs.Pull request.result }}"  # Uses the ID obtained from the input
+    resource_id: "{{ inputs.Pull request }}"  # Uses the ID obtained from the input
     result: pull_request_data  # Caches pull request blueprint data for subsequent steps
 
   - name: Load Git Integration
     action: load_resource
     resource_type: integration
-    resource_id: "{{ inputs.Git Integration.result }}"  # Uses the ID obtained from the input
+    resource_id: "{{ inputs.Git Integration }}"  # Uses the ID obtained from the input
     result: integration_data  # Caches integration data for subsequent steps
 
   - name: Upsert Properties to Pull Request
