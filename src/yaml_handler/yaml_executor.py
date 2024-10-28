@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
-
+import json
 import requests
 from ruamel.yaml import YAML
 import os
+import ast
 import re
 from src.api_clients.port_api import PortAPI  # Import the PortAPI class
 
@@ -13,11 +14,40 @@ from src.api_clients.port_api import PortAPI  # Import the PortAPI class
 @dataclass
 class Step:
     step_number: int
+    step_name: str
     action: str
     resource_type: str
     resource_id: str
     details: Dict[str, Any] = field(default_factory=dict)
     result: Any = None
+
+
+def prepare_aggregation_properties(properties: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Prepares the aggregation properties for the PATCH payload.
+    """
+    result = {}
+    for prop in properties:
+        result[prop["identifier"]] = {
+            "title": prop.get("title"),
+            "type": prop.get("type"),
+            "target": prop.get("target"),
+            "calculationSpec": json.loads(prop.get("calculationSpec", "{}"))
+        }
+    return result
+
+
+def prepare_standard_properties(properties: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Prepares the standard properties for the PATCH payload.
+    """
+    result = {}
+    for prop in properties:
+        result[prop["identifier"]] = {
+            "title": prop.get("name"),
+            "type": prop.get("type")
+        }
+    return result
 
 
 class YAMLExecutor:
@@ -53,6 +83,7 @@ class YAMLExecutor:
         execution_plan = []
         for i, step_data in enumerate(steps, start=1):
             action = step_data.get("action")
+            step_name = step_data.get("name")
 
             # Capture resource type and id without resolving placeholders
             resource_type = step_data.get("resource_type")
@@ -65,6 +96,7 @@ class YAMLExecutor:
             # Create the Step object with additional details
             step = Step(
                 step_number=i,
+                step_name=step_name,
                 action=action,
                 resource_type=resource_type,
                 resource_id=resource_id,
@@ -136,11 +168,9 @@ class YAMLExecutor:
 
         try:
             if resource_type == "blueprint":
-                # Call the PortAPI method to get blueprint data
                 resource_data = self.port_api.get_blueprint_data(resource_id)
-            # elif resource_type == "integration":
-                # Placeholder for future integration API call
-                # resource_data = self.port_api.get_integration_data(resource_id)  # Hypothetical method
+            elif resource_type == "integration":
+                resource_data = self.port_api.get_integration_data(resource_id)  # Hypothetical method
             else:
                 return {
                     "status": "error",
@@ -166,11 +196,41 @@ class YAMLExecutor:
         """
         Action handler for adding properties to a blueprint.
         """
-        properties = step.details.get("properties", [])
-        blueprint_data = step.details.get("blueprint_data")
+        # Parse blueprint_data if it is a JSON string
+        blueprint_data_str = step.details.get("blueprint_data", "")
+        try:
+            blueprint_data = ast.literal_eval(blueprint_data_str) if isinstance(blueprint_data_str,
+                                                                                str) else blueprint_data_str
+        except (ValueError, SyntaxError) as e:
+            return {"status": "failed", "action": "add_properties_to_blueprint",
+                    "error": "Invalid format in blueprint_data", "details": str(e)}
 
-        # Simulate adding properties to a blueprint
-        return {"status": "success", "action": "add_properties_to_blueprint", "properties_added": properties, "context": blueprint_data}
+        # Extract the blueprint identifier from the parsed data
+        blueprint_identifier = blueprint_data.get("data", {}).get("blueprint", {}).get("identifier")
+
+        if not blueprint_identifier:
+            return {"status": "failed", "action": "add_properties_to_blueprint",
+                    "error": "Blueprint identifier not found in data"}
+
+        # Separate properties by type
+        standard_properties = step.details.get("properties", [])
+        aggregation_properties = step.details.get("aggregationProperties", [])
+
+        # Prepare the payload for PATCH request
+        payload = {
+            "identifier": blueprint_identifier,
+            "schema": {
+                "properties": prepare_standard_properties(standard_properties)
+            },
+            "aggregationProperties": prepare_aggregation_properties(aggregation_properties)
+        }
+
+        # Send the PATCH request to update the blueprint
+        response = self.port_api.update_blueprint(blueprint_identifier, payload)
+        if response['status'] == 'success':
+            return {"status": "success", "action": "add_properties_to_blueprint", "properties_added": payload}
+        else:
+            return {"status": "failed", "action": "add_properties_to_blueprint", "error": response['error'], "details": response['details']}
 
     def add_scorecards_to_blueprint(self, step: Step) -> Dict[str, Any]:
         """
@@ -180,7 +240,7 @@ class YAMLExecutor:
         blueprint_data = step.details.get("blueprint_data")
 
         # Simulate adding scorecards to a blueprint
-        return {"status": "success", "action": "add_scorecards_to_blueprint", "scorecards_added": scorecards, "context": blueprint_data}
+        return {"status": "mock_done_nothing", "action": "add_scorecards_to_blueprint", "scorecards_added": scorecards, "context": blueprint_data}
 
     def upsert_integration(self, step: Step) -> Dict[str, Any]:
         """
@@ -188,7 +248,7 @@ class YAMLExecutor:
         """
         integration_data = step.details.get("data", [])
         # Simulate upserting an integration
-        return {"status": "success", "action": "upsert_integration", "integration_data": integration_data}
+        return {"status": "mock_done_nothing", "action": "upsert_integration", "integration_data": integration_data}
 
     def execute_steps(self) -> List[Dict[str, Any]]:
         """
@@ -204,11 +264,12 @@ class YAMLExecutor:
             # Look up the handler based on the action name
             handler = self.action_registry.get(step.action)
             if handler:
-                result = handler(step)  # Call the appropriate handler with the step
-                step.result = result  # Store the result directly in the Step object
+                result = handler(step)
+                step.result = result
             else:
                 result = {"step_number": step.step_number, "status": "unknown action", "action": step.action}
 
-            result["step_number"] = step.step_number  # Include the step number in the result
+            result["step_number"] = step.step_number
+            result["step_name"] = step.step_name
             results.append(result)
         return results

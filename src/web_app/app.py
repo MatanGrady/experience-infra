@@ -1,12 +1,17 @@
 # src/web_app/app.py
 
 from flask import Flask, render_template, request, jsonify
+
+from src.yaml_handler.yaml_executor import YAMLExecutor
 from src.yaml_handler.yaml_loader import load_yaml_files
+from src.api_clients.port_api import PortAPI
 import os
 from ruamel.yaml import YAML
 
 app = Flask(__name__, static_folder="../../static", template_folder="../../templates")
 
+# Initialize the PortAPI instance
+port_api = PortAPI()
 
 # Load YAML files and check for required inputs when rendering the main page
 @app.route('/')
@@ -25,22 +30,34 @@ def execute_steps():
 
     # Load the YAML file content
     yaml_folder = os.path.join(os.path.dirname(__file__), "../../configuration_files")
-    file_path = os.path.join(yaml_folder, filename)  # This line may be causing the issue
+    yaml_executor = YAMLExecutor(yaml_folder, port_api)
 
-    yaml = YAML()
-    with open(file_path, 'r') as file:
-        yaml_content = yaml.load(file)
+    # Load the YAML content
+    try:
+        yaml_content = yaml_executor.load_yaml(filename)
+    except FileNotFoundError:
+        return jsonify({"error": "YAML file not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    # Placeholder for Steps Manager logic
-    execution_plan = []
-    for i, step in enumerate(yaml_content.get("steps", []), start=1):
-        execution_plan.append({
-            "step": i,
-            "action": step.get("action"),
-            "details": step
-        })
+    # Pass the inputs and build the execution plan
+    yaml_executor.inputs = inputs
+    execution_plan = yaml_executor.build_execution_plan(yaml_content)
 
-    return jsonify({"execution_plan": execution_plan})
+    # Execute the steps and filter the response
+    results = yaml_executor.execute_steps()
+    filtered_results = [
+        {
+            "step_number": result.get("step_number"),
+            "step_name": result.get("step_name"),
+            "action": result.get("action"),
+            "status": result.get("status")
+        }
+        for result in results
+    ]
+
+    # Return the filtered execution results
+    return jsonify({"execution_results": filtered_results})
 
 
 if __name__ == "__main__":

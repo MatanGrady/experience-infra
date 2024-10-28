@@ -20,7 +20,7 @@ def test_yaml_executor():
     inputs = {
         "service": "service",  # Replace with an actual ID
         "Pull request": "githubPullRequest",
-        "Git Integration": "git_integration_id"
+        "Git Integration": "53367788"
     }
 
     # Initialize YAMLExecutor with PortAPI instance and inputs

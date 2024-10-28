@@ -71,7 +71,7 @@ function invokeScript(element) {
     .then(response => response.json())
     .then(data => {
         document.getElementById("popup").style.display = "none";
-        alert("Execution Plan: " + JSON.stringify(data.execution_plan, null, 2));
+        alert("Execution results: " + JSON.stringify(data.execution_results, null, 2));
     })
     .catch(error => console.error('Error:', error));
 }

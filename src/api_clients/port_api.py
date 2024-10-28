@@ -1,5 +1,5 @@
 # src/api_clients/port_api.py
-
+import json
 import os
 import requests
 from typing import Dict, Any
@@ -46,3 +46,43 @@ class PortAPI:
         response.raise_for_status()
 
         return response.json()
+
+    def get_integration_data(self, integration_id: str) -> Dict[str, Any]:
+        """
+        Fetch integration data for a given integration ID.
+        """
+        if not self.token:
+            self.authenticate()
+
+        url = f"{self.base_url}/integration/{integration_id}"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+
+        return response.json()
+
+    def update_blueprint(self, blueprint_identifier: str, payload: Dict[str, Any]) -> Any:
+        if not self.token:
+            self.authenticate()
+
+        url = f"{self.base_url}/blueprints/{blueprint_identifier}"
+        response = requests.patch(url, headers=self.headers, data=json.dumps(payload))
+
+        # Check for HTTP errors and return a structured response
+        try:
+            response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+            return {
+                "status": "success",
+                "data": response.json()  # Parse JSON response if successful
+            }
+        except requests.exceptions.HTTPError as http_err:
+            return {
+                "status": "error",
+                "error": str(http_err),
+                "details": response.text  # Include server's error message for context
+            }
+        except requests.exceptions.RequestException as req_err:
+            return {
+                "status": "error",
+                "error": str(req_err),
+                "details": "An error occurred during the request."
+            }
