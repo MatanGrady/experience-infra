@@ -21,6 +21,25 @@ class Step:
     details: Dict[str, Any] = field(default_factory=dict)
     result: Any = None
 
+def get_blueprint_identifier(blueprint_data: Any) -> Dict[str, Any]:
+    """
+    Helper function to parse blueprint data and extract the blueprint identifier.
+    Returns a dictionary with either a 'status' key for failure or an 'identifier' key for success.
+    """
+    # Parse blueprint_data if it is a JSON string
+
+    try:
+        blueprint_data = ast.literal_eval(blueprint_data) if isinstance(blueprint_data,
+                                                                            str) else blueprint_data
+    except (ValueError, SyntaxError) as e:
+        return {"status": "failed", "error": "Invalid JSON in blueprint_data"}
+
+    # Extract the blueprint identifier
+    blueprint_identifier = blueprint_data.get("data", {}).get("blueprint", {}).get("identifier")
+    if not blueprint_identifier:
+        return {"status": "failed", "error": "Blueprint identifier not found in data"}
+
+    return {"status": "success", "identifier": blueprint_identifier}
 
 def prepare_aggregation_properties(properties: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -236,11 +255,45 @@ class YAMLExecutor:
         """
         Action handler for adding scorecards to a blueprint.
         """
+        blueprint_data = step.details.get("blueprint_data", "")
         scorecards = step.details.get("scorecards", [])
-        blueprint_data = step.details.get("blueprint_data")
 
-        # Simulate adding scorecards to a blueprint
-        return {"status": "mock_done_nothing", "action": "add_scorecards_to_blueprint", "scorecards_added": scorecards, "context": blueprint_data}
+        # Use the helper function to get the blueprint identifier
+        result = get_blueprint_identifier(blueprint_data)
+        if result["status"] == "failed":
+            return {"status": "failed", "action": "add_scorecards_to_blueprint", "error": result["error"]}
+
+        blueprint_identifier = result["identifier"]
+
+        # Ensure there is at least one scorecard
+        if not scorecards:
+            return {"status": "failed", "action": "add_scorecards_to_blueprint", "error": "No scorecards provided"}
+
+        # Take only the first scorecard
+        scorecard = scorecards[0]
+
+        # Prepare the payload for the scorecard creation API
+        payload = {
+            "identifier": scorecard["identifier"],
+            "title": scorecard["name"],
+            "rules": [
+                {
+                    "identifier": rule["identifier"],
+                    "title": rule["title"],
+                    "level": rule["level"],
+                    "query": json.loads(rule["query"])  # Parse the query string to a JSON object
+                } for rule in scorecard["rules"]
+            ]
+        }
+
+        # Send the request to create the scorecard in Port
+        response = self.port_api.create_scorecard(blueprint_identifier, payload)
+
+        if response["status"] == "success":
+            return {"status": "success", "action": "add_scorecards_to_blueprint", "scorecards_added": [scorecard]}
+        else:
+            return {"status": "failed", "action": "add_scorecards_to_blueprint", "error": response["error"],
+                    "details": response["details"]}
 
     def upsert_integration(self, step: Step) -> Dict[str, Any]:
         """

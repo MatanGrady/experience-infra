@@ -86,3 +86,28 @@ class PortAPI:
                 "error": str(req_err),
                 "details": "An error occurred during the request."
             }
+
+    def create_scorecard(self, blueprint_identifier: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.base_url}/blueprints/{blueprint_identifier}/scorecards"
+
+        response = requests.post(url, headers=self.headers, data=json.dumps(payload))
+
+        # Check for HTTP errors and return a structured response
+        try:
+            response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+            return {
+                "status": "success",
+                "data": response.json()  # Parse JSON response if successful
+            }
+        except requests.exceptions.HTTPError as http_err:
+            return {
+                "status": "error",
+                "error": str(http_err),
+                "details": response.text  # Include server's error message for context
+            }
+        except requests.exceptions.RequestException as req_err:
+            return {
+                "status": "error",
+                "error": str(req_err),
+                "details": "An error occurred during the request."
+            }

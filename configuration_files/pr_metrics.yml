@@ -1,6 +1,8 @@
 title: "Add PR Metrics"
 description: "Enrich your pull requests with advanced metrics"
 
+# This is a YAML file that includes steps that will be automatically executed in my Port envirnoment
+
 # Define inputs that specify the initial information for the workflow
 inputs:
   service:
@@ -60,7 +62,7 @@ steps:
                 "conditions": [
                   {
                     "operator": "isNotEmpty",
-                    "property": "prDescription"
+                    "property": "description"
                   }
                 ]
               }
@@ -73,7 +75,7 @@ steps:
                 "conditions": [
                   {
                     "operator": "<=",
-                    "property": "changedFiles",
+                    "property": "changed_files",
                     "value": 5
                   }
                 ]
